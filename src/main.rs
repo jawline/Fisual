@@ -1,10 +1,25 @@
-extern crate rand;
+#![feature(drain_filter)]
 extern crate cpal;
+extern crate rand;
+extern crate variant_count;
 
-use rand::{rngs::SmallRng, distributions::uniform::{Uniform}, Rng, SeedableRng};
-use std::error::Error;
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+mod sample;
+mod ui;
+mod mixer;
+
 use clap::Parser;
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use rand::{distributions::uniform::Uniform, rngs::SmallRng, Rng, SeedableRng};
+use std::error::Error;
+use sample::Sample;
+use mixer::Mixer;
+
+use std::io::{self, Write, Read};
+use crate::ui::Ui;
+
+use std::sync::mpsc;
+use std::sync::mpsc::{Sender, Receiver};
+use std::thread;
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
@@ -15,7 +30,6 @@ struct Args {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-
     let args = Args::parse();
     let seed = args.seed;
 
@@ -30,36 +44,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 }
 
-#[derive(Debug)]
-enum Sample {
-    Sin { rate : f32, amplitude : f32 },
-    Sawtooth { pitch : f32, rate : f32 },
-}
-
-impl Sample {
-    fn next(&self, clock : f32) -> f32 {
-      match self {
-          Sample::Sin { rate, amplitude } => {
-            (clock * amplitude * 2.0 * std::f32::consts::PI / (rate)).sin()
-          },
-          Sample::Sawtooth { rate, pitch } => {
-              -1. + (((clock / rate) * pitch % 1.) * 2.)
-          }
-      }
-    }
-
-    fn random(rng: &mut SmallRng, sample_rate: f32) -> Self {
-        let random_sine = Sample::Sin { rate: sample_rate, amplitude: rng.sample(Uniform::new(290., 360.)) };
-        let random_sawtooth = Sample::Sawtooth { rate: sample_rate, pitch: rng.sample(Uniform::new(100., 600.)) };
-        match rng.sample(Uniform::new(0,1)) {
-            0 => random_sine,
-            1 => random_sawtooth,
-            _ => panic!("random out of range"),
-        }
-    }
-}
-
-pub fn run<T>(device: &cpal::Device, config: &cpal::StreamConfig, seed : i64) -> Result<(), Box<dyn Error>>
+pub fn run<T>(
+    device: &cpal::Device,
+    config: &cpal::StreamConfig,
+    seed: i64,
+) -> Result<(), Box<dyn Error>>
 where
     T: cpal::Sample,
 {
@@ -67,21 +56,49 @@ where
     let sample_rate = config.sample_rate.0 as f32;
     let channels = config.channels as usize;
 
-    let mut sample = Sample::Sawtooth { rate: sample_rate, pitch: 300. };
+    let mut sample = Mixer::new();
     let mut continue_samples = 0.;
 
     let mut sample_clock = 0f32;
+
+    let min_spawn: f32 = rng.sample(Uniform::new(0.0, 1.0));
+    let max_spawn: f32 = min_spawn + rng.sample(Uniform::new(0.0, 1.0));
+
+    let (sample_tx, sample_rx): (Sender<f32>, Receiver<f32>) = mpsc::channel();
+
+    // Spawn a ui thread
+    thread::spawn(move || {
+      let mut ui = Ui::new(1500, 1, sample_rate as usize).unwrap();
+
+      loop {
+
+          for sample in sample_rx.try_iter().take(sample_rate as usize * 4) {
+              ui.add_sample(sample);
+          }
+
+          ui.update().unwrap();
+          ui.draw().unwrap();
+          thread::sleep(std::time::Duration::from_millis(50));
+      }
+    });
+
     let mut next_value = move || {
 
         sample_clock = (sample_clock + 1.0) % sample_rate;
 
         continue_samples = continue_samples - 1.;
+
         if sample_clock == 0. && continue_samples < 0. {
-            continue_samples = rng.sample(Uniform::new((sample_rate / 2.), sample_rate * 2.));
-            sample = Sample::random(&mut rng, sample_rate);
+            continue_samples = rng.sample(Uniform::new(sample_rate * min_spawn, sample_rate * max_spawn));
+            let decay_rate = rng.sample(Uniform::new(sample_rate / 8., sample_rate * 4.));
+            let decay = rng.sample(Uniform::new(0.5, 0.9));
+            sample.add_sample(Sample::random(&mut rng, sample_rate), decay, 1. / decay_rate);
         }
+
         let next = sample.next(sample_clock);
-        println!("{}", next);
+
+        sample_tx.send(next).unwrap();
+
         next
     };
 
@@ -94,9 +111,12 @@ where
         },
         err_fn,
     )?;
+
     stream.play()?;
 
-    std::thread::sleep(std::time::Duration::from_millis(30000));
+    loop {
+        thread::sleep(std::time::Duration::from_millis(30000));
+    }
 
     Ok(())
 }

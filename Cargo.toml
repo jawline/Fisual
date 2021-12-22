@@ -7,3 +7,6 @@ edition = "2021"
 clap = { version = "3.0.0-rc.7", features=["derive"] }
 cpal = "0.13.4"
 rand = { version = "0.8.4", features=["small_rng"] }
+variant_count = "1.1.0"
+tui = "0.16.0"
+termion = "1.5"
