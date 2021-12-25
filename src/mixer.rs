@@ -4,6 +4,7 @@ pub struct Chunk {
     pub sample: Sample,
     pub decay: f32,
     pub decay_rate: f32,
+    pub samples: f32,
 }
 
 pub struct Mixer {
@@ -23,6 +24,7 @@ impl Mixer {
             sample,
             decay,
             decay_rate,
+            samples: 0.,
         });
     }
 
@@ -30,12 +32,13 @@ impl Mixer {
         let mut sampled = 0.;
 
         self.chunks.drain_filter(|sample| {
-            sampled += sample.sample.next(count) * sample.decay;
+            sampled += sample.sample.next(sample.samples) * sample.decay;
+            sample.samples += 1.;
             sample.decay -= sample.decay_rate;
             sample.decay < 0.
         });
 
-        sampled
+        f32::max(f32::min(sampled, 1.0), -1.)
     }
 
 }

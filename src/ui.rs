@@ -68,6 +68,16 @@ impl Ui {
         (first_time, last_time, frame)
     }
 
+    fn fft_frame(&self, sample_window: usize) -> (f64, f64, Vec<(f64, f64)>) {
+        use crate::fft::do_fft;
+        use crate::complex::Complex;
+        let (first_time, last_time, frame) = self.frame(sample_window);
+        let frame : Vec<Complex> = frame.iter().map(|(_, x)| Complex::real(*x)).collect();
+        let frame = do_fft(&frame, false);
+        let frame = frame.iter().enumerate().map(|(i, x)| (i as f64, x.real)).collect();
+        (0., sample_window as f64, frame)
+    }
+
     pub fn update(&mut self) -> Result<(), Box<dyn Error>> {
 
         while let Some(item) = self.stdin.next() {
@@ -92,7 +102,7 @@ impl Ui {
 
     pub fn draw(&mut self) -> Result<(), Box<dyn Error>> {
 
-        let (first_time, last_time, frame) = self.frame(self.sample_window);
+        let (first_time, last_time, frame) = self.fft_frame(self.sample_window);
 
         if frame.len() == 0 {
             return Ok(());

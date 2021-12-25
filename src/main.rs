@@ -6,6 +6,8 @@ extern crate variant_count;
 mod sample;
 mod ui;
 mod mixer;
+mod complex;
+mod fft;
 
 use clap::Parser;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -90,8 +92,8 @@ where
 
         if sample_clock == 0. && continue_samples < 0. {
             continue_samples = rng.sample(Uniform::new(sample_rate * min_spawn, sample_rate * max_spawn));
-            let decay_rate = rng.sample(Uniform::new(sample_rate / 8., sample_rate * 4.));
-            let decay = rng.sample(Uniform::new(0.5, 0.9));
+            let decay_rate = rng.sample(Uniform::new(sample_rate / 8., sample_rate * 8.));
+            let decay = rng.sample(Uniform::new(0.5, 1.));
             sample.add_sample(Sample::random(&mut rng, sample_rate), decay, 1. / decay_rate);
         }
 
