@@ -10,6 +10,7 @@ use tui::{
     widgets::{Axis, Block, Borders, Chart, Dataset, GraphType},
     Frame, Terminal,
 };
+use crate::complex::Complex;
 
 pub struct Ui {
     samples: Vec<(f64, f64)>,
@@ -27,9 +28,9 @@ impl Ui {
         write!(stdout, "{}", termion::clear::All).unwrap();
 
         let backend = TermionBackend::new(stdout);
-        let mut terminal = Terminal::new(backend)?;
+        let terminal = Terminal::new(backend)?;
 
-        let mut stdin = async_stdin().bytes();
+        let stdin = async_stdin().bytes();
 
         Ok(Ui {
             sample_window,
@@ -68,14 +69,28 @@ impl Ui {
         (first_time, last_time, frame)
     }
 
+    // Pad a frame to the nearest power of 2 of entries for the fast-fourier transform
+    fn fft_round_to_nearest_pow2(mut frame: Vec<Complex>) -> Vec<Complex> {
+        let current_len = frame.len();
+        let new_len = (current_len.next_power_of_two());
+        let new_entries = new_len - current_len;
+        for _ in 0..new_entries {
+            frame.push(Complex::real(0.));
+        }
+        frame
+    }
+
     fn fft_frame(&self, sample_window: usize) -> (f64, f64, Vec<(f64, f64)>) {
+        // TODO: Pre-allocate memory in self on sample size changes and modify fast-fourier
+        // transform to be in place. Performance should stop sucking afterwards.
+        // (Maybe subsample larger windows)
         use crate::fft::do_fft;
-        use crate::complex::Complex;
-        let (first_time, last_time, frame) = self.frame(sample_window);
+        let (_first_time, _last_time, frame) = self.frame(sample_window);
         let frame : Vec<Complex> = frame.iter().map(|(_, x)| Complex::real(*x)).collect();
-        let frame = do_fft(&frame, false);
-        let frame = frame.iter().enumerate().map(|(i, x)| (i as f64, x.real)).collect();
-        (0., sample_window as f64, frame)
+        let frame = Self::fft_round_to_nearest_pow2(frame);
+        let frame = do_fft(&frame, false).expect("do_fft failed. probably not a power of two");
+        let frame : Vec<(f64, f64)> = frame.iter().enumerate().map(|(i, x)| (i as f64, x.real)).collect();
+        (0., frame.len() as f64, frame)
     }
 
     pub fn update(&mut self) -> Result<(), Box<dyn Error>> {
@@ -83,13 +98,11 @@ impl Ui {
         while let Some(item) = self.stdin.next() {
             match item {
               Ok(b'+') => {
-                  self.sample_window += 200;
+                  self.sample_window += 50;
               },
               Ok(b'-') => {
-                  if self.sample_window > 400 {
-                      self.sample_window -= 200;
-                  } else {
-                      self.sample_window = 1;
+                  if self.sample_window > 50 {
+                      self.sample_window -= 50;
                   }
               },
               Ok(b'q') => std::process::exit(0),
@@ -131,7 +144,7 @@ impl Ui {
                 .style(Style::default().fg(Color::Gray))
                 .bounds([first_time, last_time])
                 .labels(vec![
-                    Span::styled(format!("{:.2}s", last_time), Style::default().add_modifier(Modifier::BOLD)),
+                    Span::styled(format!("{}", last_time), Style::default().add_modifier(Modifier::BOLD)),
                 ]),
         )
         .y_axis(

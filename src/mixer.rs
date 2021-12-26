@@ -28,7 +28,7 @@ impl Mixer {
         });
     }
 
-    pub fn next(&mut self, count: f32) -> f32 {
+    pub fn next(&mut self) -> f32 {
         let mut sampled = 0.;
 
         self.chunks.drain_filter(|sample| {

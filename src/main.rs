@@ -97,7 +97,7 @@ where
             sample.add_sample(Sample::random(&mut rng, sample_rate), decay, 1. / decay_rate);
         }
 
-        let next = sample.next(sample_clock);
+        let next = sample.next();
 
         sample_tx.send(next).unwrap();
 

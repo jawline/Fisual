@@ -108,7 +108,9 @@ mod complex_test {
 
     #[test]
     fn complex_div() {
-        assert_eq!(Complex::complex(4., 2.) / Complex::complex(0., 3.), Complex::complex(2. / 3., - 4. / 3.));
-
+        assert_eq!(
+            Complex::complex(4., 2.) / Complex::complex(0., 3.),
+            Complex::complex(2. / 3., - 4. / 3.)
+        );
     }
 }

@@ -31,7 +31,7 @@ impl Sample {
 
         let random_sine = Sample::Sin {
             rate: sample_rate,
-            amplitude: rng.sample(Uniform::new(400., 401.)),
+            amplitude: rng.sample(Uniform::new(200., 801.)),
         };
 
         let random_sawtooth = Sample::Sawtooth {
