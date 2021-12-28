@@ -1,56 +1,54 @@
-use std::ops::{Add, Sub, Mul, MulAssign, Div, DivAssign};
+use num::traits::Float;
+use std::ops::{Add, Div, DivAssign, Mul, MulAssign, Sub};
 
 // TODO: Make Complex parametric instead of f64
 
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub struct Complex {
-    pub real : f64,
-    pub imaginary : f64,
+#[derive(Debug, PartialEq, Clone, Copy, PartialOrd)]
+pub struct Complex<T: Float> {
+    pub real: T,
+    pub imaginary: T,
 }
 
-impl Complex {
-    pub fn real(real: f64) -> Self {
+impl<T: Float> Complex<T> {
+    pub fn real(real: T) -> Self {
         Complex {
             real,
-            imaginary: 0.,
+            imaginary: T::zero(),
         }
     }
 
-    pub fn complex(real: f64, imaginary: f64) -> Self {
-        Complex {
-            real,
-            imaginary,
-        }
+    pub fn complex(real: T, imaginary: T) -> Self {
+        Complex { real, imaginary }
     }
 }
 
-impl Add for Complex {
+impl<T: Float> Add for Complex<T> {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self {
         Complex {
             real: self.real + rhs.real,
-            imaginary: self.imaginary + rhs.imaginary
+            imaginary: self.imaginary + rhs.imaginary,
         }
     }
 }
 
-impl Sub for Complex {
+impl<T: Float> Sub for Complex<T> {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self {
         Complex {
             real: self.real - rhs.real,
-            imaginary: self.imaginary - rhs.imaginary
+            imaginary: self.imaginary - rhs.imaginary,
         }
     }
 }
 
-impl Div for Complex {
+impl<T: Float> Div for Complex<T> {
     type Output = Self;
 
     fn div(self, rhs: Self) -> Self {
-        let divisor = (rhs.real.powf(2.)) + (rhs.imaginary.powf(2.));
+        let divisor = (rhs.real.powi(2)) + (rhs.imaginary.powi(2));
         Complex {
             real: ((self.real * rhs.real) + (self.imaginary * rhs.imaginary)) / divisor,
             imaginary: ((self.imaginary * rhs.real) - (self.real * rhs.imaginary)) / divisor,
@@ -58,24 +56,24 @@ impl Div for Complex {
     }
 }
 
-impl DivAssign for Complex {
+impl<T: Float> DivAssign for Complex<T> {
     fn div_assign(&mut self, rhs: Self) {
         *self = *self / rhs;
     }
 }
 
-impl Mul for Complex {
+impl<T: Float> Mul for Complex<T> {
     type Output = Self;
 
     fn mul(self, rhs: Self) -> Self {
         Complex {
             real: (self.real * rhs.real) - (self.imaginary * rhs.imaginary),
-            imaginary: (self.imaginary * rhs.real) + (self.real * rhs.imaginary)
+            imaginary: (self.imaginary * rhs.real) + (self.real * rhs.imaginary),
         }
     }
 }
 
-impl MulAssign for Complex {
+impl<T: Float> MulAssign for Complex<T> {
     fn mul_assign(&mut self, rhs: Self) {
         *self = *self * rhs;
     }
@@ -110,7 +108,7 @@ mod complex_test {
     fn complex_div() {
         assert_eq!(
             Complex::complex(4., 2.) / Complex::complex(0., 3.),
-            Complex::complex(2. / 3., - 4. / 3.)
+            Complex::complex(2. / 3., -4. / 3.)
         );
     }
 }

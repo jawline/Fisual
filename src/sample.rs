@@ -1,21 +1,47 @@
-use variant_count::VariantCount;
 use rand::{distributions::uniform::Uniform, rngs::SmallRng, Rng};
+use variant_count::VariantCount;
 
 #[derive(Debug, VariantCount)]
 pub enum Sample {
-    Sin { rate: f32, amplitude: f32 },
-    Sawtooth { frequency: f32, rate: f32 },
-    Square { duty : f32, rate : f32, frequency: f32 },
-    Triangle { rate: f32, frequency: f32 },
+    Sin {
+        rate: f32,
+        amplitude: f32,
+    },
+    Sawtooth {
+        frequency: f32,
+        rate: f32,
+    },
+    Square {
+        duty: f32,
+        rate: f32,
+        frequency: f32,
+    },
+    Triangle {
+        rate: f32,
+        frequency: f32,
+    },
 }
 
 impl Sample {
-
     pub fn next(&self, clock: f32) -> f32 {
         match self {
-            Sample::Sin { rate, amplitude } => (clock * amplitude * 2.0 * std::f32::consts::PI / (rate)).sin(),
-            Sample::Sawtooth { rate, frequency } => -1. + ((((clock * frequency) / rate) % 1.) * 2.),
-            Sample::Square { duty, rate, frequency } => if (clock * frequency / rate) % 1. > *duty { 1. } else { -1. }
+            Sample::Sin { rate, amplitude } => {
+                (clock * amplitude * 2.0 * std::f32::consts::PI / (rate)).sin()
+            }
+            Sample::Sawtooth { rate, frequency } => {
+                -1. + ((((clock * frequency) / rate) % 1.) * 2.)
+            }
+            Sample::Square {
+                duty,
+                rate,
+                frequency,
+            } => {
+                if (clock * frequency / rate) % 1. > *duty {
+                    1.
+                } else {
+                    -1.
+                }
+            }
             Sample::Triangle { rate, frequency } => {
                 let stage = ((clock * frequency) / rate) % 4.;
                 if stage <= 2. {
@@ -28,7 +54,6 @@ impl Sample {
     }
 
     pub fn random(rng: &mut SmallRng, sample_rate: f32) -> Self {
-
         let random_sine = Sample::Sin {
             rate: sample_rate,
             amplitude: rng.sample(Uniform::new(200., 801.)),

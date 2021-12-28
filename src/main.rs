@@ -1,26 +1,26 @@
 #![feature(drain_filter)]
 extern crate cpal;
+extern crate num;
 extern crate rand;
 extern crate variant_count;
 
-mod sample;
-mod ui;
-mod mixer;
 mod complex;
 mod fft;
+mod mixer;
+mod sample;
+mod ui;
 
 use clap::Parser;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use rand::{distributions::uniform::Uniform, rngs::SmallRng, Rng, SeedableRng};
-use std::error::Error;
-use sample::Sample;
 use mixer::Mixer;
+use rand::{distributions::uniform::Uniform, rngs::SmallRng, Rng, SeedableRng};
+use sample::Sample;
+use std::error::Error;
 
-use std::io::{self, Write, Read};
 use crate::ui::Ui;
 
 use std::sync::mpsc;
-use std::sync::mpsc::{Sender, Receiver};
+use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
 
 /// Simple program to greet a person
@@ -70,31 +70,36 @@ where
 
     // Spawn a ui thread
     thread::spawn(move || {
-      let mut ui = Ui::new(1500, 1, sample_rate as usize).unwrap();
+        let mut ui = Ui::new(1500, 1, sample_rate as usize).unwrap();
 
-      loop {
+        loop {
+            for sample in sample_rx.try_iter().take(sample_rate as usize * 4) {
+                ui.add_sample(sample);
+            }
 
-          for sample in sample_rx.try_iter().take(sample_rate as usize * 4) {
-              ui.add_sample(sample);
-          }
-
-          ui.update().unwrap();
-          ui.draw().unwrap();
-          thread::sleep(std::time::Duration::from_millis(50));
-      }
+            ui.update().unwrap();
+            ui.draw().unwrap();
+            thread::sleep(std::time::Duration::from_millis(50));
+        }
     });
 
     let mut next_value = move || {
-
         sample_clock = (sample_clock + 1.0) % sample_rate;
 
         continue_samples = continue_samples - 1.;
 
         if sample_clock == 0. && continue_samples < 0. {
-            continue_samples = rng.sample(Uniform::new(sample_rate * min_spawn, sample_rate * max_spawn));
+            continue_samples = rng.sample(Uniform::new(
+                sample_rate * min_spawn,
+                sample_rate * max_spawn,
+            ));
             let decay_rate = rng.sample(Uniform::new(sample_rate / 8., sample_rate * 8.));
             let decay = rng.sample(Uniform::new(0.5, 1.));
-            sample.add_sample(Sample::random(&mut rng, sample_rate), decay, 1. / decay_rate);
+            sample.add_sample(
+                Sample::random(&mut rng, sample_rate),
+                decay,
+                1. / decay_rate,
+            );
         }
 
         let next = sample.next();
@@ -119,8 +124,6 @@ where
     loop {
         thread::sleep(std::time::Duration::from_millis(30000));
     }
-
-    Ok(())
 }
 
 fn write_data<T>(output: &mut [T], channels: usize, next_sample: &mut dyn FnMut() -> f32)

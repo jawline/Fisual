@@ -10,3 +10,4 @@ rand = { version = "0.8.4", features=["small_rng"] }
 variant_count = "1.1.0"
 tui = "0.16.0"
 termion = "1.5"
+num = "0.4.0"

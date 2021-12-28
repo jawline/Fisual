@@ -12,11 +12,8 @@ pub struct Mixer {
 }
 
 impl Mixer {
-
     pub fn new() -> Self {
-        Mixer {
-            chunks: Vec::new()
-        }
+        Mixer { chunks: Vec::new() }
     }
 
     pub fn add_sample(&mut self, sample: Sample, decay: f32, decay_rate: f32) {
@@ -40,5 +37,4 @@ impl Mixer {
 
         f32::max(f32::min(sampled, 1.0), -1.)
     }
-
 }
