@@ -1,3 +1,8 @@
+/**
+ *  We use this complex number implementation to implement
+ *  fast-fourier transforms using an algorithm described
+ *  at https://cp-algorithms.com/algebra/fft.html
+ */
 use num::traits::Float;
 use std::ops::{Add, Div, DivAssign, Mul, MulAssign, Sub};
 
