@@ -54,6 +54,8 @@ fn bitwise_reverse_permute<T: Float>(input: &mut [Complex<T>], size: usize) {
 
 // TODO: Tests
 
+// TODO: We could cache the permutation and angle for some small performance increase using a
+// struct but that would make the Api a little more complex. Consider it later.
 pub fn do_fft<T: Float>(input: &mut [Complex<T>], inverse: bool) -> Result<(), Box<dyn Error>> {
     // This algorithm does not work on non-pow2 input vectors but it is fine to pad the input
     // vector with zero-values.
