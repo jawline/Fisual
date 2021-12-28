@@ -1,8 +1,6 @@
 use num::traits::Float;
 use std::ops::{Add, Div, DivAssign, Mul, MulAssign, Sub};
 
-// TODO: Make Complex parametric instead of f64
-
 #[derive(Debug, PartialEq, Clone, Copy, PartialOrd)]
 pub struct Complex<T: Float> {
     pub real: T,
