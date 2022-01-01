@@ -88,6 +88,17 @@ impl Ui {
         frame
     }
 
+    fn frequency_in_hz_of_sample(
+        sample_index: usize,
+        num_samples: usize,
+        sample_rate: usize,
+    ) -> f64 {
+        let sample_index = sample_index as f64;
+        let num_samples = num_samples as f64;
+        let sample_rate = sample_rate as f64;
+        sample_rate * (sample_index / num_samples)
+    }
+
     fn fft_frame(&self, sample_window: usize) -> (f64, f64, Vec<(f64, f64)>) {
         // TODO: Pre-allocate memory in self on sample size changes and modify fast-fourier
         // transform to be in place. Performance should stop sucking afterwards.
@@ -96,13 +107,27 @@ impl Ui {
         let (_first_time, _last_time, frame) = self.frame(sample_window);
         let frame: Vec<Complex<f64>> = frame.iter().map(|(_, x)| Complex::real(*x)).collect();
         let mut frame = Self::fft_round_to_nearest_pow2(frame);
+        let frequency_samples = frame.len();
         do_fft(&mut frame, false).expect("do_fft failed. probably not a power of two");
-        let frame: Vec<(f64, f64)> = frame
+
+        let frequency_samples = frame
             .iter()
             .enumerate()
-            .map(|(i, x)| (i as f64, x.real))
-            .collect();
-        (0., frame.len() as f64, frame)
+            .map(|(sample_index, frequency_state)| {
+                (
+                    Self::frequency_in_hz_of_sample(
+                        sample_index,
+                        frequency_samples,
+                        self.sample_rate,
+                    ),
+                    frequency_state.imaginary,
+                )
+            });
+
+        let zero_zero = [(0., 0.)].into_iter();
+
+        let frame: Vec<(f64, f64)> = zero_zero.chain(frequency_samples).collect();
+        (0., self.sample_rate as f64, frame)
     }
 
     pub fn update(&mut self) -> Result<(), Box<dyn Error>> {
@@ -153,10 +178,16 @@ impl Ui {
                         .title("time (s)")
                         .style(Style::default().fg(Color::Gray))
                         .bounds([first_time, last_time])
-                        .labels(vec![Span::styled(
-                            format!("{}", last_time),
-                            Style::default().add_modifier(Modifier::BOLD),
-                        )]),
+                        .labels(vec![
+                            Span::styled(
+                                format!("{}Hhz", first_time),
+                                Style::default().add_modifier(Modifier::BOLD),
+                            ),
+                            Span::styled(
+                                format!("{}Hhz", last_time),
+                                Style::default().add_modifier(Modifier::BOLD),
+                            ),
+                        ]),
                 )
                 .y_axis(
                     Axis::default()

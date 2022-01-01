@@ -2,7 +2,6 @@
  * A rust implementation of fast fourier transforms.
  * Uses an algorithm described at https://cp-algorithms.com/algebra/fft.html.
  */
-
 use crate::complex::Complex;
 use num::traits::Float;
 use std::error::Error;
@@ -63,7 +62,6 @@ fn bitwise_reverse_permute<T: Float>(input: &mut [Complex<T>], size: usize) {
 // TODO: We could cache the permutation and angle for some small performance increase using a
 // struct but that would make the Api a little more complex. Consider it later.
 pub fn do_fft<T: Float>(input: &mut [Complex<T>], inverse: bool) -> Result<(), Box<dyn Error>> {
-
     // This algorithm does not work on non-pow2 input vectors but it is fine to pad the input
     // vector with zero-values.
     if !is_power_of_two(input.len()) {
