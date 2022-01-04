@@ -13,6 +13,12 @@ pub struct Complex<T: Float> {
 }
 
 impl<T: Float> Complex<T> {
+    pub fn magnitude(self) -> T {
+        ((self.real * self.real) + (self.imaginary * self.imaginary)).sqrt()
+    }
+}
+
+impl<T: Float> Complex<T> {
     pub fn real(real: T) -> Self {
         Complex {
             real,

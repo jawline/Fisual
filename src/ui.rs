@@ -1,4 +1,5 @@
 use crate::complex::Complex;
+use crate::fft::do_fft;
 use std::error::Error;
 use std::io::{stdout, Bytes, Read, Stdout, Write};
 use termion::{
@@ -7,13 +8,13 @@ use termion::{
     AsyncReader,
 };
 use tui::{
-    backend::TermionBackend,
-    layout::{Constraint, Direction, Layout, Rect},
+    backend::{Backend, TermionBackend},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     symbols,
     text::Span,
-    widgets::{Axis, Block, Borders, Chart, Dataset, GraphType},
-    Terminal,
+    widgets::{Axis, Block, Borders, Chart, Dataset, GraphType, Paragraph, Widget, Wrap},
+    Frame, Terminal,
 };
 
 pub struct Ui {
@@ -78,6 +79,20 @@ impl Ui {
         (first_time, last_time, frame)
     }
 
+    fn fft_round_to(mut frame: Vec<Complex<f64>>, new_len: usize) -> Vec<Complex<f64>> {
+        let current_len = frame.len();
+
+        if frame.len() >= new_len {
+            panic!("too large");
+        }
+
+        let new_entries = new_len - current_len;
+        for _ in 0..new_entries {
+            frame.push(Complex::real(0.));
+        }
+        frame
+    }
+
     // Pad a frame to the nearest power of 2 of entries for the fast-fourier transform
     fn fft_round_to_nearest_pow2(mut frame: Vec<Complex<f64>>) -> Vec<Complex<f64>> {
         let current_len = frame.len();
@@ -104,31 +119,45 @@ impl Ui {
         // TODO: Pre-allocate memory in self on sample size changes and modify fast-fourier
         // transform to be in place. Performance should stop sucking afterwards.
         // (Maybe subsample larger windows)
-        use crate::fft::do_fft;
+
+        // We run our fft on the samples returned by frame using a specific number of sound
+        // samples.
         let (_first_time, _last_time, frame) = self.frame(sample_window);
         let frame: Vec<Complex<f64>> = frame.iter().map(|(_, x)| Complex::real(*x)).collect();
-        let mut frame = Self::fft_round_to_nearest_pow2(frame);
-        let frequency_samples = frame.len();
+
+        // We pad the fft frame to 2^16 elements which has the effect of interpolating values in
+        // the fft.
+        let mut frame = Self::fft_round_to(frame, 65536);
         do_fft(&mut frame, false).expect("do_fft failed. probably not a power of two");
 
-        let frequency_samples = frame
+        // For real numbers, the fft is symmetric and we get the amplitude by summing the
+        // magnitudes of X[k] and X[-k] for 0 <= k < (len(X) / 2)
+        let datapoints = frame.len();
+        let half_datapoints = frame.len() / 2;
+
+        let first_half = frame.iter().take(half_datapoints);
+        let second_half = frame
             .iter()
-            .enumerate()
-            .map(|(sample_index, frequency_state)| {
+            .skip(half_datapoints)
+            .take(half_datapoints)
+            .rev();
+
+        let frequency_samples = first_half.zip(second_half).enumerate().map(
+            |(sample_index, (first_half_freq, second_half_freq))| {
                 (
-                    Self::frequency_in_hz_of_sample(
-                        sample_index,
-                        frequency_samples,
-                        self.sample_rate,
-                    ),
-                    frequency_state.real,
+                    Self::frequency_in_hz_of_sample(sample_index, datapoints, self.sample_rate),
+                    (first_half_freq.magnitude() + second_half_freq.magnitude())
+                        / self.sample_window as f64,
                 )
-            });
+            },
+        );
 
+        // Add a zero point so tui prints a flat line before the first data point
+        // rather than empty space.
         let zero_zero = [(0., 0.)].into_iter();
-
         let frame: Vec<(f64, f64)> = zero_zero.chain(frequency_samples).collect();
-        (0., self.sample_rate as f64, frame)
+
+        (0., frame.last().unwrap().0, frame)
     }
 
     pub fn update(&mut self) -> Result<(), Box<dyn Error>> {
@@ -148,6 +177,17 @@ impl Ui {
         }
 
         Ok(())
+    }
+
+    fn draw_widget<W: Widget + Sized, T: Backend>(
+        f: &mut Frame<'_, T>,
+        widget: Option<W>,
+        chunk: Rect,
+    ) {
+        match widget {
+            Some(widget) => f.render_widget(widget, chunk),
+            None => (),
+        }
     }
 
     pub fn chart<'a>(
@@ -180,18 +220,17 @@ impl Ui {
                     .bounds([first_time, last_time])
                     .labels(vec![
                         Span::styled(
-                            format!("{}{}", first_time, x_unit),
+                            format!("{:.2}{}", first_time, x_unit),
                             Style::default().add_modifier(Modifier::BOLD),
                         ),
                         Span::styled(
-                            format!("{}{}", last_time, x_unit),
+                            format!("{:.2}{}", last_time, x_unit),
                             Style::default().add_modifier(Modifier::BOLD),
                         ),
                     ]),
             )
             .y_axis(
                 Axis::default()
-                    .title("amplitude")
                     .style(Style::default().fg(Color::Gray))
                     .bounds([-1., 1.])
                     .labels(vec![
@@ -236,17 +275,28 @@ impl Ui {
             };
 
             let chunks = Layout::default()
-                .constraints([Constraint::Length(15), Constraint::Length(15)].as_ref())
+                .constraints(
+                    [
+                        Constraint::Length(4),
+                        Constraint::Length(15),
+                        Constraint::Length(15),
+                    ]
+                    .as_ref(),
+                )
                 .margin(1)
                 .split(f.size());
 
-            let mut render_exists = |widget: Option<Chart>, chunk: usize| match widget {
-                Some(widget) => f.render_widget(widget, chunks[chunk]),
-                None => (),
-            };
+            let intro_text = Some(
+                Paragraph::new(format!("Samples: {}", self.sample_window))
+                    .block(Block::default().borders(Borders::ALL))
+                    .style(Style::default().fg(Color::White).bg(Color::Black))
+                    .alignment(Alignment::Center)
+                    .wrap(Wrap { trim: true }),
+            );
 
-            render_exists(freq_widget, 0);
-            render_exists(fft_widget, 1);
+            Self::draw_widget(f, intro_text, chunks[0]);
+            Self::draw_widget(f, fft_widget, chunks[1]);
+            Self::draw_widget(f, freq_widget, chunks[2]);
         })?;
         Ok(())
     }

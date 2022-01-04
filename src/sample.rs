@@ -96,7 +96,7 @@ impl Sample {
             frequency: rng.sample(Uniform::new(250., 500.)),
         };
 
-        match rng.sample(Uniform::new(0, 1)) {
+        match rng.sample(Uniform::new(0, 4)) {
             0 => random_sine,
             1 => random_sawtooth,
             2 => random_square,
