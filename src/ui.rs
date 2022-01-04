@@ -8,6 +8,7 @@ use termion::{
 };
 use tui::{
     backend::TermionBackend,
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     symbols,
     text::Span,
@@ -120,7 +121,7 @@ impl Ui {
                         frequency_samples,
                         self.sample_rate,
                     ),
-                    frequency_state.imaginary,
+                    frequency_state.real,
                 )
             });
 
@@ -149,58 +150,103 @@ impl Ui {
         Ok(())
     }
 
-    pub fn draw(&mut self) -> Result<(), Box<dyn Error>> {
-        let (first_time, last_time, frame) = self.fft_frame(self.sample_window);
+    pub fn chart<'a>(
+        title: &'a str,
+        x_title: &'a str,
+        x_unit: &'a str,
+        (first_time, last_time): (f64, f64),
+        frame: &'a [(f64, f64)],
+    ) -> Chart<'a> {
+        let datasets = vec![Dataset::default()
+            .marker(symbols::Marker::Braille)
+            .style(Style::default().fg(Color::Green))
+            .graph_type(GraphType::Line)
+            .data(frame)];
+        Chart::new(datasets)
+            .block(
+                Block::default()
+                    .title(Span::styled(
+                        title,
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
+                    ))
+                    .borders(Borders::ALL),
+            )
+            .x_axis(
+                Axis::default()
+                    .title(x_title)
+                    .style(Style::default().fg(Color::Gray))
+                    .bounds([first_time, last_time])
+                    .labels(vec![
+                        Span::styled(
+                            format!("{}{}", first_time, x_unit),
+                            Style::default().add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(
+                            format!("{}{}", last_time, x_unit),
+                            Style::default().add_modifier(Modifier::BOLD),
+                        ),
+                    ]),
+            )
+            .y_axis(
+                Axis::default()
+                    .title("amplitude")
+                    .style(Style::default().fg(Color::Gray))
+                    .bounds([-1., 1.])
+                    .labels(vec![
+                        Span::styled("-1.0", Style::default().add_modifier(Modifier::BOLD)),
+                        Span::raw("0."),
+                        Span::styled("1.0", Style::default().add_modifier(Modifier::BOLD)),
+                    ]),
+            )
+    }
 
-        if frame.len() == 0 {
-            return Ok(());
-        }
+    pub fn draw(&mut self) -> Result<(), Box<dyn Error>> {
+        let (first_time, last_time, frame) = self.frame(self.sample_window);
+        let (first_freq, last_freq, fft_frame) = self.fft_frame(self.sample_window);
 
         self.terminal.draw(|f| {
-            let datasets = vec![Dataset::default()
-                .marker(symbols::Marker::Braille)
-                .style(Style::default().fg(Color::Green))
-                .graph_type(GraphType::Line)
-                .data(&frame[..])];
-            let chart = Chart::new(datasets)
-                .block(
-                    Block::default()
-                        .title(Span::styled(
-                            format!("samples: {}", frame.len()),
-                            Style::default()
-                                .fg(Color::Cyan)
-                                .add_modifier(Modifier::BOLD),
-                        ))
-                        .borders(Borders::ALL),
-                )
-                .x_axis(
-                    Axis::default()
-                        .title("time (s)")
-                        .style(Style::default().fg(Color::Gray))
-                        .bounds([first_time, last_time])
-                        .labels(vec![
-                            Span::styled(
-                                format!("{}Hhz", first_time),
-                                Style::default().add_modifier(Modifier::BOLD),
-                            ),
-                            Span::styled(
-                                format!("{}Hhz", last_time),
-                                Style::default().add_modifier(Modifier::BOLD),
-                            ),
-                        ]),
-                )
-                .y_axis(
-                    Axis::default()
-                        .title("amplitude")
-                        .style(Style::default().fg(Color::Gray))
-                        .bounds([-1., 1.])
-                        .labels(vec![
-                            Span::styled("-1.0", Style::default().add_modifier(Modifier::BOLD)),
-                            Span::raw("0."),
-                            Span::styled("1.0", Style::default().add_modifier(Modifier::BOLD)),
-                        ]),
-                );
-            f.render_widget(chart, f.size());
+            let freq_widget = {
+                if frame.len() == 0 {
+                    None
+                } else {
+                    Some(Self::chart(
+                        "waveform",
+                        "time (s)",
+                        "s",
+                        (first_time, last_time),
+                        &frame[..],
+                    ))
+                }
+            };
+
+            let fft_widget = {
+                if frame.len() == 0 {
+                    None
+                } else {
+                    Some(Self::chart(
+                        "frequency spectrum",
+                        "frequency (hz)",
+                        "hz",
+                        (first_freq, last_freq),
+                        &fft_frame[..],
+                    ))
+                }
+            };
+
+            let chunks = Layout::default()
+                .constraints([Constraint::Length(15), Constraint::Length(15)].as_ref())
+                .margin(1)
+                .split(f.size());
+
+            let mut render_exists = |widget: Option<Chart>, chunk: usize| match widget {
+                Some(widget) => f.render_widget(widget, chunks[chunk]),
+                None => (),
+            };
+
+            render_exists(freq_widget, 0);
+            render_exists(fft_widget, 1);
         })?;
         Ok(())
     }

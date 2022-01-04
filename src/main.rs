@@ -63,8 +63,8 @@ where
 
     let mut sample_clock = 0f32;
 
-    let min_spawn: f32 = rng.sample(Uniform::new(0.0, 1.0));
-    let max_spawn: f32 = min_spawn + rng.sample(Uniform::new(0.0, 1.0));
+    let min_spawn: f32 = rng.sample(Uniform::new(0.0, 4.0));
+    let max_spawn: f32 = min_spawn + rng.sample(Uniform::new(4.0, 8.0));
 
     let (sample_tx, sample_rx): (Sender<f32>, Receiver<f32>) = mpsc::channel();
 
@@ -94,12 +94,13 @@ where
                 sample_rate * max_spawn,
             ));
             let decay_rate = rng.sample(Uniform::new(sample_rate / 8., sample_rate * 8.));
-            let decay = rng.sample(Uniform::new(0.5, 1.));
-            sample.add_sample(
-                Sample::random(&mut rng, sample_rate),
-                decay,
-                1. / decay_rate,
-            );
+            let decay = rng.sample(Uniform::new(0.5, 0.6));
+            sample.add_sample(Sample::c6(sample_rate), decay, 1. / decay_rate); /*
+                                                                                sample.add_sample(
+                                                                                    Sample::random(&mut rng, sample_rate),
+                                                                                    decay,
+                                                                                    1. / decay_rate,
+                                                                                );*/
         }
 
         let next = sample.next();

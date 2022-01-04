@@ -5,7 +5,7 @@ use variant_count::VariantCount;
 pub enum Sample {
     Sin {
         rate: f32,
-        amplitude: f32,
+        frequency: f32,
     },
     Sawtooth {
         frequency: f32,
@@ -25,8 +25,8 @@ pub enum Sample {
 impl Sample {
     pub fn next(&self, clock: f32) -> f32 {
         match self {
-            Sample::Sin { rate, amplitude } => {
-                (clock * amplitude * 2.0 * std::f32::consts::PI / (rate)).sin()
+            Sample::Sin { rate, frequency } => {
+                (2.0 * std::f32::consts::PI * frequency * (clock * (1. / rate))).sin()
             }
             Sample::Sawtooth { rate, frequency } => {
                 -1. + ((((clock * frequency) / rate) % 1.) * 2.)
@@ -53,10 +53,31 @@ impl Sample {
         }
     }
 
+    pub fn middle_c(sample_rate: f32) -> Self {
+        Sample::Sin {
+            rate: sample_rate,
+            frequency: 261.63,
+        }
+    }
+
+    pub fn c6(sample_rate: f32) -> Self {
+        Sample::Sin {
+            rate: sample_rate,
+            frequency: 1046.50,
+        }
+    }
+
+    pub fn c8(sample_rate: f32) -> Self {
+        Sample::Sin {
+            rate: sample_rate,
+            frequency: 4186.01,
+        }
+    }
+
     pub fn random(rng: &mut SmallRng, sample_rate: f32) -> Self {
         let random_sine = Sample::Sin {
             rate: sample_rate,
-            amplitude: rng.sample(Uniform::new(200., 801.)),
+            frequency: rng.sample(Uniform::new(200., 801.)),
         };
 
         let random_sawtooth = Sample::Sawtooth {
