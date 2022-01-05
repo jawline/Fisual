@@ -42,6 +42,13 @@ impl<T: Float> Add for Complex<T> {
     }
 }
 
+impl<'a, T: Float> Add<&'a Complex<T>> for &'a Complex<T> {
+    type Output = Complex<T>;
+    fn add(self, rhs: Self) -> Self::Output {
+        *self + *rhs
+    }
+}
+
 impl<T: Float> Sub for Complex<T> {
     type Output = Self;
 
@@ -50,6 +57,13 @@ impl<T: Float> Sub for Complex<T> {
             real: self.real - rhs.real,
             imaginary: self.imaginary - rhs.imaginary,
         }
+    }
+}
+
+impl<'a, T: Float> Sub<&'a Complex<T>> for &'a Complex<T> {
+    type Output = Complex<T>;
+    fn sub(self, rhs: Self) -> Self::Output {
+        *self - *rhs
     }
 }
 
@@ -62,6 +76,13 @@ impl<T: Float> Div for Complex<T> {
             real: ((self.real * rhs.real) + (self.imaginary * rhs.imaginary)) / divisor,
             imaginary: ((self.imaginary * rhs.real) - (self.real * rhs.imaginary)) / divisor,
         }
+    }
+}
+
+impl<'a, T: Float> Div<&'a Complex<T>> for &'a Complex<T> {
+    type Output = Complex<T>;
+    fn div(self, rhs: Self) -> Self::Output {
+        *self / *rhs
     }
 }
 
@@ -79,6 +100,13 @@ impl<T: Float> Mul for Complex<T> {
             real: (self.real * rhs.real) - (self.imaginary * rhs.imaginary),
             imaginary: (self.imaginary * rhs.real) + (self.real * rhs.imaginary),
         }
+    }
+}
+
+impl<'a, T: Float> Mul<&'a Complex<T>> for &'a Complex<T> {
+    type Output = Complex<T>;
+    fn mul(self, rhs: Self) -> Self::Output {
+        *self * *rhs
     }
 }
 

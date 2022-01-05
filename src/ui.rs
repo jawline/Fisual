@@ -1,5 +1,4 @@
-use crate::complex::Complex;
-use crate::fft::do_fft;
+use crate::fft::RealFft;
 use std::error::Error;
 use std::io::{stdout, Bytes, Read, Stdout, Write};
 use termion::{
@@ -29,6 +28,7 @@ pub struct Ui {
     sample_rate: usize,
     terminal: Terminal<TermionBackend<RawTerminal<Stdout>>>,
     stdin: Bytes<AsyncReader>,
+    fft_buffer: RealFft<f64>,
 }
 
 impl Ui {
@@ -52,6 +52,7 @@ impl Ui {
             sample_rate,
             terminal,
             stdin,
+            fft_buffer: RealFft::new(65536)?,
         })
     }
 
@@ -84,85 +85,24 @@ impl Ui {
         (first_time, last_time, frame)
     }
 
-    fn fft_round_to(mut frame: Vec<Complex<f64>>, new_len: usize) -> Vec<Complex<f64>> {
-        let current_len = frame.len();
-
-        if frame.len() >= new_len {
-            panic!("too large");
-        }
-
-        let new_entries = new_len - current_len;
-        for _ in 0..new_entries {
-            frame.push(Complex::real(0.));
-        }
-        frame
-    }
-
-    // Pad a frame to the nearest power of 2 of entries for the fast-fourier transform
-    fn fft_round_to_nearest_pow2(mut frame: Vec<Complex<f64>>) -> Vec<Complex<f64>> {
-        let current_len = frame.len();
-        let new_len = current_len.next_power_of_two();
-        let new_entries = new_len - current_len;
-        for _ in 0..new_entries {
-            frame.push(Complex::real(0.));
-        }
-        frame
-    }
-
-    fn frequency_in_hz_of_sample(
-        sample_index: usize,
-        num_samples: usize,
-        sample_rate: usize,
-    ) -> f64 {
-        let sample_index = sample_index as f64;
-        let num_samples = num_samples as f64;
-        let sample_rate = sample_rate as f64;
-        sample_rate * (sample_index / num_samples)
-    }
-
-    fn fft_frame(&self, sample_window: usize) -> (f64, f64, Vec<(f64, f64)>) {
-        // TODO: Pre-allocate memory in self on sample size changes and modify fast-fourier
-        // transform to be in place. Performance should stop sucking afterwards.
-        // (Maybe subsample larger windows)
-
-        // We run our fft on the samples returned by frame using a specific number of sound
-        // samples.
+    fn fft_frame(
+        &mut self,
+        sample_window: usize,
+    ) -> Result<(f64, f64, Vec<(f64, f64)>), Box<dyn Error>> {
+        // TODO: fft could be modified to take an inter of amplitudes to avoid
+        // the overhead of cloning twice
         let (_first_time, _last_time, frame) = self.frame(sample_window);
-        let frame: Vec<Complex<f64>> = frame.iter().map(|(_, x)| Complex::real(*x)).collect();
-
-        // We pad the fft frame to 2^16 elements which has the effect of interpolating values in
-        // the fft.
-        let mut frame = Self::fft_round_to(frame, 65536);
-        do_fft(&mut frame, false).expect("do_fft failed. probably not a power of two");
-
-        // For real numbers, the fft is symmetric and we get the amplitude by summing the
-        // magnitudes of X[k] and X[-k] for 0 <= k < (len(X) / 2)
-        let datapoints = frame.len();
-        let half_datapoints = frame.len() / 2;
-
-        let first_half = frame.iter().take(half_datapoints);
-        let second_half = frame
-            .iter()
-            .skip(half_datapoints)
-            .take(half_datapoints)
-            .rev();
-
-        let frequency_samples = first_half.zip(second_half).enumerate().map(
-            |(sample_index, (first_half_freq, second_half_freq))| {
-                (
-                    Self::frequency_in_hz_of_sample(sample_index, datapoints, self.sample_rate),
-                    (first_half_freq.magnitude() + second_half_freq.magnitude())
-                        / self.sample_window as f64,
-                )
-            },
-        );
+        let frame_amplitudes: Vec<f64> = frame.iter().map(|(x, y)| *y).collect();
 
         // Add a zero point so tui prints a flat line before the first data point
         // rather than empty space.
-        let zero_zero = [(0., 0.)].into_iter();
-        let frame: Vec<(f64, f64)> = zero_zero.chain(frequency_samples).collect();
-
-        (0., frame.last().unwrap().0, frame)
+        let result_frequencies: Vec<(f64, f64)> = self
+            .fft_buffer
+            .run(&frame_amplitudes)?
+            .iter()
+            .cloned()
+            .collect();
+        Ok((0., result_frequencies.last().unwrap().0, result_frequencies))
     }
 
     pub fn update(&mut self) -> Result<LoopState, Box<dyn Error>> {
@@ -248,7 +188,7 @@ impl Ui {
 
     pub fn draw(&mut self) -> Result<(), Box<dyn Error>> {
         let (first_time, last_time, frame) = self.frame(self.sample_window);
-        let (first_freq, last_freq, fft_frame) = self.fft_frame(self.sample_window);
+        let (first_freq, last_freq, fft_frame) = self.fft_frame(self.sample_window)?;
 
         self.terminal.draw(|f| {
             let freq_widget = {

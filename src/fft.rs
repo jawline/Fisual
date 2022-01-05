@@ -10,6 +10,13 @@ fn is_power_of_two(x: usize) -> bool {
     (x > 0) & ((x & (x - 1)) == 0)
 }
 
+fn frequency_in_hz_of_sample(sample_index: usize, num_samples: usize, sample_rate: usize) -> f64 {
+    let sample_index = sample_index as f64;
+    let num_samples = num_samples as f64;
+    let sample_rate = sample_rate as f64;
+    sample_rate * (sample_index / num_samples)
+}
+
 fn c<T: Float>(input: f64) -> Result<T, Box<dyn Error>> {
     Ok(T::from::<f64>(input).ok_or("cannot convert f64 to T")?)
 }
@@ -117,6 +124,30 @@ pub fn do_fft<T: Float>(input: &mut [Complex<T>], inverse: bool) -> Result<(), B
     Ok(())
 }
 
+/// Pad a frame to the specified number of elements, filling the remaining with zeros
+pub fn round_to(mut frame: Vec<Complex<f64>>, new_len: usize) -> Vec<Complex<f64>> {
+    let current_len = frame.len();
+
+    if frame.len() >= new_len {
+        panic!("too large");
+    }
+
+    let new_entries = new_len - current_len;
+
+    for _ in 0..new_entries {
+        frame.push(Complex::real(0.));
+    }
+
+    frame
+}
+
+/// Pad a frame to the nearest power of 2 of entries for the fast-fourier transform
+pub fn round_to_nearest_pow2(mut frame: Vec<Complex<f64>>) -> Vec<Complex<f64>> {
+    let current_len = frame.len();
+    let new_len = current_len.next_power_of_two();
+    round_to(frame, new_len)
+}
+
 #[cfg(test)]
 mod fft_test {
     use crate::complex::Complex;
@@ -158,4 +189,90 @@ mod fft_test {
     }
 
     // TODO: Tests
+}
+
+/// Performs the FFT on real-value inputs and combines the two symmetric portions
+/// buffers are pre-allocated to reduce allocator pressure
+pub struct RealFft<T: Float> {
+    buffer: Vec<Complex<T>>,
+    result_buffer: Vec<(T, T)>,
+}
+
+impl<'a, T: Float> RealFft<T> {
+    /// Create a new fft with a buffer of a specific sample size.
+    /// sample_size must be a power of two.
+    pub fn new(sample_size: usize) -> Result<Self, Box<dyn Error>> {
+        if is_power_of_two(sample_size) {
+            let zero = c(0.)?;
+            Ok(RealFft {
+                buffer: vec![Complex::real(zero); sample_size],
+                result_buffer: vec![(zero, zero); sample_size / 2],
+            })
+        } else {
+            Err("sample_size is not a power of two".into())
+        }
+    }
+
+    /// Prepare a set of input reals as complex values in the fft buffer and pad the remaining
+    /// buffer space with zeros.
+    fn prepare_buffer(&mut self, data: &[T]) -> Result<(), Box<dyn Error>> {
+        if data.len() >= self.buffer.capacity() {
+            return Err("data supplied is larger than the FFT buffer".into());
+        }
+
+        let zero = c(0.)?;
+
+        for i in 0..data.len() {
+            self.buffer[i] = Complex::real(data[i]);
+        }
+
+        // We pad the fft frame to 2^16 elements which has the effect of interpolating values in
+        // the fft.
+        for i in data.len()..self.buffer.capacity() {
+            self.buffer[i] = Complex::real(zero);
+        }
+
+        Ok(())
+    }
+
+    fn sample_window(&self) -> usize {
+        self.buffer.capacity()
+    }
+
+    /// For real results the fft is symmetric and we
+    /// get the amplitude by summing the magnitudes of
+    /// X[k] and X[-k] for 0 <= k < (len(X) / 2)
+    /// We place the result in the real buffer.
+    fn prepare_real_result_from_fft_buffer(
+        &mut self,
+        input_size: usize,
+    ) -> Result<(), Box<dyn Error>> {
+        let datapoints = self.sample_window();
+        let half_datapoints = self.sample_window() / 2;
+
+        for sample_index in 0..half_datapoints {
+            let first_half_freq = self.buffer[sample_index];
+            let second_half_freq = self.buffer[datapoints - 1 - sample_index];
+            let frequency = c(frequency_in_hz_of_sample(
+                sample_index,
+                datapoints,
+                input_size,
+            ))?;
+            let amplitude =
+                (first_half_freq + second_half_freq).magnitude() / c(input_size as f64)?;
+            self.result_buffer[sample_index] = (frequency, amplitude);
+        }
+
+        Ok(())
+    }
+
+    /// Take a set of real values and return the real frequencies in hz and amplitudes from the
+    /// FFT.
+    pub fn run(&'a mut self, data: &[T]) -> Result<&'a [(T, T)], Box<dyn Error>> {
+        let input_size = data.len();
+        self.prepare_buffer(data)?;
+        do_fft(&mut self.buffer, false).expect("do_fft failed. probably not a power of two");
+        self.prepare_real_result_from_fft_buffer(input_size)?;
+        Ok(&self.result_buffer[..])
+    }
 }
