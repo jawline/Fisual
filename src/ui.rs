@@ -9,13 +9,18 @@ use termion::{
 };
 use tui::{
     backend::{Backend, TermionBackend},
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     symbols,
     text::Span,
     widgets::{Axis, Block, Borders, Chart, Dataset, GraphType, Paragraph, Widget, Wrap},
     Frame, Terminal,
 };
+
+pub enum LoopState {
+    Continue,
+    Exit,
+}
 
 pub struct Ui {
     samples: Vec<(f64, f64)>,
@@ -160,7 +165,7 @@ impl Ui {
         (0., frame.last().unwrap().0, frame)
     }
 
-    pub fn update(&mut self) -> Result<(), Box<dyn Error>> {
+    pub fn update(&mut self) -> Result<LoopState, Box<dyn Error>> {
         while let Some(item) = self.stdin.next() {
             match item {
                 Ok(b'+') => {
@@ -171,12 +176,12 @@ impl Ui {
                         self.sample_window -= 50;
                     }
                 }
-                Ok(b'q') => std::process::exit(0),
+                Ok(b'q') => return Ok(LoopState::Exit),
                 _ => {}
             };
         }
 
-        Ok(())
+        Ok(LoopState::Continue)
     }
 
     fn draw_widget<W: Widget + Sized, T: Backend>(
@@ -287,10 +292,10 @@ impl Ui {
                 .split(f.size());
 
             let intro_text = Some(
-                Paragraph::new(format!("Samples: {}", self.sample_window))
+                Paragraph::new(format!("{} samples visualized", self.sample_window))
                     .block(Block::default().borders(Borders::ALL))
                     .style(Style::default().fg(Color::White).bg(Color::Black))
-                    .alignment(Alignment::Center)
+                    .alignment(Alignment::Left)
                     .wrap(Wrap { trim: true }),
             );
 

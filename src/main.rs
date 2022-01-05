@@ -17,7 +17,7 @@ use rand::{distributions::uniform::Uniform, rngs::SmallRng, Rng, SeedableRng};
 use sample::Sample;
 use std::error::Error;
 
-use crate::ui::Ui;
+use crate::ui::{LoopState, Ui};
 
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
@@ -66,23 +66,14 @@ where
     let min_spawn: f32 = rng.sample(Uniform::new(0.0, 2.0));
     let max_spawn: f32 = min_spawn + rng.sample(Uniform::new(0.0, 2.0));
 
+    // The audio thread sends samples on a channel back to the main thread for visualization
     let (sample_tx, sample_rx): (Sender<f32>, Receiver<f32>) = mpsc::channel();
 
-    // Spawn a ui thread
-    thread::spawn(move || {
-        let mut ui = Ui::new(1500, 1, sample_rate as usize).unwrap();
+    // We use a channel to communicate when the audio thread should stop generating random data
+    let (finished_tx, finished_rx): (Sender<()>, Receiver<()>) = mpsc::channel();
 
-        loop {
-            for sample in sample_rx.try_iter().take(sample_rate as usize * 4) {
-                ui.add_sample(sample);
-            }
-
-            ui.update().unwrap();
-            ui.draw().unwrap();
-            thread::sleep(std::time::Duration::from_millis(50));
-        }
-    });
-
+    // This closure captures the new mixer we created and yields a function that will sample the
+    // next value from it, refilling the mixer when samples end.
     let mut next_value = move || {
         sample_clock = (sample_clock + 1.0) % sample_rate;
 
@@ -112,19 +103,46 @@ where
 
     let err_fn = |err| eprintln!("an error occurred on stream: {}", err);
 
+    let mut finished = false;
+
     let stream = device.build_output_stream(
         config,
         move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
-            write_data(data, channels, &mut next_value)
+            if let Ok(()) = finished_rx.try_recv() {
+                finished = true;
+            }
+
+            if !finished {
+                write_data(data, channels, &mut next_value)
+            }
         },
         err_fn,
     )?;
 
     stream.play()?;
 
-    loop {
-        thread::sleep(std::time::Duration::from_millis(30000));
+    let mut ui = Ui::new(1500, 1, sample_rate as usize).unwrap();
+    let mut should_continue = true;
+
+    while should_continue {
+        for sample in sample_rx.try_iter().take(sample_rate as usize * 4) {
+            ui.add_sample(sample);
+        }
+
+        should_continue = match ui.update().unwrap() {
+            LoopState::Continue => true,
+            LoopState::Exit => false,
+        };
+
+        if !should_continue {
+            finished_tx.send(())?;
+        }
+
+        ui.draw().unwrap();
+        thread::sleep(std::time::Duration::from_millis(2));
     }
+
+    Ok(())
 }
 
 fn write_data<T>(output: &mut [T], channels: usize, next_sample: &mut dyn FnMut() -> f32)
