@@ -28,7 +28,7 @@ impl Mixer {
         let mut sampled = 0.;
 
         self.chunks.drain_filter(|sample| {
-            sampled += sample.sample.next(sample.samples) ;
+            sampled += sample.sample.next(sample.samples);
             sample.samples += 1.;
             sample.sample.finished()
         });

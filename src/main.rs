@@ -18,8 +18,8 @@ use rand::{distributions::uniform::Uniform, rngs::SmallRng, Rng, SeedableRng};
 use sample::Sample;
 use std::error::Error;
 
-use crate::ui::{LoopState, Ui};
 use crate::adsr::Adsr;
+use crate::ui::{Command, LoopState, Note, Ui};
 
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
@@ -68,6 +68,10 @@ where
     let min_spawn: f32 = rng.sample(Uniform::new(0.0, 2.0));
     let max_spawn: f32 = min_spawn + rng.sample(Uniform::new(0.0, 2.0));
 
+    // The UI can request new sounds be created through 'Command'. These are sent over channels to
+    // the audio thread.
+    let (command_tx, command_rx): (Sender<Command>, Receiver<Command>) = mpsc::channel();
+
     // The audio thread sends samples on a channel back to the main thread for visualization
     let (sample_tx, sample_rx): (Sender<f32>, Receiver<f32>) = mpsc::channel();
 
@@ -79,8 +83,54 @@ where
     let mut next_value = move || {
         sample_clock = (sample_clock + 1.0) % sample_rate;
 
-        continue_samples = continue_samples - 1.;
+        match command_rx.try_recv() {
+            Ok(command) => match command {
+                Command::Start(Note::C) => sample.add_sample(Adsr::new(
+                    Sample::middle_c(sample_rate),
+                    sample_rate,
+                    0.4,
+                    0.7,
+                    0.3,
+                    0.6,
+                    0.6,
+                    0.5,
+                )),
+                Command::Start(Note::B) => sample.add_sample(Adsr::new(
+                    Sample::middle_b(sample_rate),
+                    sample_rate,
+                    0.4,
+                    0.7,
+                    0.3,
+                    0.6,
+                    0.6,
+                    0.5,
+                )),
+                Command::Start(Note::A) => sample.add_sample(Adsr::new(
+                    Sample::middle_a(sample_rate),
+                    sample_rate,
+                    0.4,
+                    0.7,
+                    0.3,
+                    0.6,
+                    0.6,
+                    0.5,
+                )),
+                Command::Start(Note::D) => sample.add_sample(Adsr::new(
+                    Sample::middle_a(sample_rate),
+                    sample_rate,
+                    0.4,
+                    0.7,
+                    0.3,
+                    0.6,
+                    0.6,
+                    0.5,
+                )),
+            },
+            Err(_) => {}
+        };
 
+        continue_samples = continue_samples - 1.;
+        /*
         if sample_clock == 0. && continue_samples < 0. {
             continue_samples = rng.sample(Uniform::new(
                 sample_rate * min_spawn,
@@ -100,7 +150,7 @@ where
                     Sample::random(&mut rng, sample_rate),
                     sample_rate, attack, attack_peak, decay, sustain, sustain_peak, release)
             );
-        }
+        } */
 
         let next = sample.next();
 
@@ -129,7 +179,7 @@ where
 
     stream.play()?;
 
-    let mut ui = Ui::new(1500, 1, sample_rate as usize).unwrap();
+    let mut ui = Ui::new(1500, 1, sample_rate as usize, command_tx).unwrap();
     let mut should_continue = true;
 
     while should_continue {

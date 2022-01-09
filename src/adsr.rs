@@ -92,7 +92,6 @@ impl Adsr {
             self.current_state = next_state;
             sampled * end_scalar
         } else {
-
             let low_sample = start_scalar * sampled;
             let high_sample = end_scalar * sampled;
 
@@ -133,7 +132,7 @@ impl Adsr {
     pub fn finished(&self) -> bool {
         match self.current_state {
             Attack | Decay | Sustain | Release => false,
-            Finished => true
+            Finished => true,
         }
     }
 }

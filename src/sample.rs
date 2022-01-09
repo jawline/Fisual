@@ -53,10 +53,31 @@ impl Sample {
         }
     }
 
+    pub fn middle_a(sample_rate: f32) -> Self {
+        Sample::Sin {
+            rate: sample_rate,
+            frequency: 440.,
+        }
+    }
+
+    pub fn middle_b(sample_rate: f32) -> Self {
+        Sample::Sin {
+            rate: sample_rate,
+            frequency: 493.883,
+        }
+    }
+
     pub fn middle_c(sample_rate: f32) -> Self {
         Sample::Sin {
             rate: sample_rate,
             frequency: 261.63,
+        }
+    }
+
+    pub fn middle_d(sample_rate: f32) -> Self {
+        Sample::Sin {
+            rate: sample_rate,
+            frequency: 293.665,
         }
     }
 

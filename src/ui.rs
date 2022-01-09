@@ -1,6 +1,7 @@
 use crate::fft::RealFft;
 use std::error::Error;
 use std::io::{stdout, Bytes, Read, Stdout, Write};
+use std::sync::mpsc::Sender;
 use termion::{
     async_stdin,
     raw::{IntoRawMode, RawTerminal},
@@ -16,6 +17,17 @@ use tui::{
     Frame, Terminal,
 };
 
+pub enum Note {
+    A,
+    B,
+    C,
+    D,
+}
+
+pub enum Command {
+    Start(Note),
+}
+
 pub enum LoopState {
     Continue,
     Exit,
@@ -29,6 +41,7 @@ pub struct Ui {
     terminal: Terminal<TermionBackend<RawTerminal<Stdout>>>,
     stdin: Bytes<AsyncReader>,
     fft_buffer: RealFft<f64>,
+    commander: Sender<Command>,
 }
 
 impl Ui {
@@ -36,6 +49,7 @@ impl Ui {
         sample_window: usize,
         seconds_to_record: usize,
         sample_rate: usize,
+        commander: Sender<Command>,
     ) -> Result<Self, Box<dyn Error>> {
         let mut stdout = stdout().into_raw_mode()?;
         write!(stdout, "{}", termion::clear::All).unwrap();
@@ -53,6 +67,7 @@ impl Ui {
             terminal,
             stdin,
             fft_buffer: RealFft::new(65536, sample_rate as f64)?,
+            commander,
         })
     }
 
@@ -115,6 +130,18 @@ impl Ui {
                     if self.sample_window > 50 {
                         self.sample_window -= 50;
                     }
+                }
+                Ok(b'a') => {
+                    self.commander.send(Command::Start(Note::A))?;
+                }
+                Ok(b'b') => {
+                    self.commander.send(Command::Start(Note::B))?;
+                }
+                Ok(b'c') => {
+                    self.commander.send(Command::Start(Note::C))?;
+                }
+                Ok(b'd') => {
+                    self.commander.send(Command::Start(Note::D))?;
                 }
                 Ok(b'q') => return Ok(LoopState::Exit),
                 _ => {}
