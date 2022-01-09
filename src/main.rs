@@ -4,6 +4,7 @@ extern crate num;
 extern crate rand;
 extern crate variant_count;
 
+mod adsr;
 mod complex;
 mod fft;
 mod mixer;
