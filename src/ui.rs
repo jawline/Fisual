@@ -52,7 +52,7 @@ impl Ui {
             sample_rate,
             terminal,
             stdin,
-            fft_buffer: RealFft::new(65536)?,
+            fft_buffer: RealFft::new(65536, sample_rate as f64)?,
         })
     }
 
