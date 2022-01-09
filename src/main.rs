@@ -19,6 +19,7 @@ use sample::Sample;
 use std::error::Error;
 
 use crate::ui::{LoopState, Ui};
+use crate::adsr::Adsr;
 
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
@@ -85,14 +86,20 @@ where
                 sample_rate * min_spawn,
                 sample_rate * max_spawn,
             ));
-            let decay_rate = rng.sample(Uniform::new(sample_rate / 1., sample_rate * 1.1));
-            let decay = rng.sample(Uniform::new(0.5, 0.7));
+
+            let sustain_peak = rng.sample(Uniform::new(0.3, 0.7));
+            let attack_peak = sustain_peak + rng.sample(Uniform::new(0.0, 0.3));
+
+            let attack = rng.sample(Uniform::new(0., 1.));
+            let decay = rng.sample(Uniform::new(0., 1.));
+            let sustain = rng.sample(Uniform::new(0., 5.));
+            let release = rng.sample(Uniform::new(0., 3.));
+
             sample.add_sample(
-                Sample::random(&mut rng, sample_rate),
-                decay,
-                1. / decay_rate,
+                Adsr::new(
+                    Sample::random(&mut rng, sample_rate),
+                    sample_rate, attack, attack_peak, decay, sustain, sustain_peak, release)
             );
-            // sample.add_sample(Sample::c6(sample_rate), decay, 1. / decay_rate);
         }
 
         let next = sample.next();
